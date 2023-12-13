@@ -1,0 +1,22 @@
+{
+    "agentStats": {
+        "almostOutOfDateCount": 1,
+        "outOfDateCount": 0,
+        "disconnectedCount": 19,
+        "healthyCount": 0,
+        "neverConnected": 0,
+        "unknown": 0,
+        "totalContainerisedCount": 0,
+        "totalCount": 1
+    },
+    "details": [
+        {
+            "agentStatus": "Almost Out of Date",
+            "agentVersion": "12.15.0",
+            "agentLastSeen": "2023-12-13T19:23:50Z",
+            "clusterName": "sysdig",
+            "deploymentType": "host",
+            "containerised": false
+        }
+    ]
+}
