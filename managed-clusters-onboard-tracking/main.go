@@ -24,16 +24,65 @@ func main() {
 		return
 	}
 
-	fmt.Println("Number of clusters:", len(clusters))
+	enrichedClusters, err := enrichClusterData(clusters)
+	if err != nil {
+		log.Fatal("error enriching cluster data: ", err)
+		return
+	}
+
 	// Write to CSV
-	err = writeToCSV(args.Output, clusters)
+	err = writeToCSV(args.Output, enrichedClusters)
 	if err != nil {
 		fmt.Println("Failed to write to CSV:", err)
 	}
 }
 
+func enrichClusterData(clusters []model.ClusterInfo) ([]model.EnrichedClusterInfo, error) {
+	enrichedClusters := make([]model.EnrichedClusterInfo, len(clusters))
+
+	for i, cluster := range clusters {
+		enriched := model.EnrichedClusterInfo{ClusterInfo: cluster}
+		// printe entire cluster object
+		fmt.Println(cluster)
+		if cluster.AgentConnected {
+			agentData, err := getAgentData(cluster.Name)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get agent data: %v", err)
+			}
+
+			if agentData.AgentStats != (model.AgentStats{}) {
+				enriched.NodesConnected = fmt.Sprintf("%v", agentData.AgentStats.TotalCount)
+			} else {
+				enriched.NodesConnected = "0"
+			}
+
+			agentDetails := filterAgentDetails(agentData.Details, []model.AgentStatusType{
+				model.AgentStatusAlmostOutOfDate,
+				model.AgentStatusOutOfDate,
+				model.AgentStatusUpToDate,
+				model.AgentStatusDisconnected,
+			})
+			if len(agentDetails) > 0 {
+				enriched.AgentStatus = agentDetails[0].AgentStatus
+				enriched.AgentVersion = agentDetails[0].AgentVersion
+			} else {
+				enriched.AgentStatus = "N/A"
+				enriched.AgentVersion = "N/A"
+			}
+		} else {
+			enriched.NodesConnected = "0"
+			enriched.AgentStatus = "N/A"
+			enriched.AgentVersion = "N/A"
+		}
+
+		enrichedClusters[i] = enriched
+	}
+
+	return enrichedClusters, nil
+}
+
 // Function to write to CSV
-func writeToCSV(fileName string, clusters []model.ClusterInfo) error {
+func writeToCSV(fileName string, enrichedClusters []model.EnrichedClusterInfo) error {
 	file, err := os.Create(fileName)
 	if err != nil {
 		return err
@@ -47,42 +96,18 @@ func writeToCSV(fileName string, clusters []model.ClusterInfo) error {
 	writer.Write([]string{"name", "node_count", "agentConnected", "nodes_connected", "agent_status", "agent_version", "provider", "environment"})
 
 	// Write data
-	for _, cluster := range clusters {
-		name := cluster.Name
-		nodeCount := fmt.Sprintf("%d", cluster.NodeCount)
-		agentConnected := fmt.Sprintf("%v", cluster.AgentConnected)
-		provider := cluster.Provider
-
-		environment := getEnvironment(string(name[3]))
-
-		var nodesConnected, agentStatus, agentVersion string
-
-		if agentConnected == "true" {
-			agentData, _ := getAgentData(name)
-			if agentData.AgentStats != (model.AgentStats{}) {
-				agentStats := agentData.AgentStats
-				nodesConnected = fmt.Sprintf("%v", agentStats.TotalCount)
-			} else {
-				nodesConnected = "0"
-			}
-
-			agentDetails := agentData.Details
-
-			filtered := filterAgentDetails(agentDetails, []string{"Almost out of date", "Out of date", "Up to date"})
-			if len(filtered) > 0 {
-				agentStatus = fmt.Sprintf("%v", filtered[0].AgentStatus)
-				agentVersion = fmt.Sprintf("%v", filtered[0].AgentVersion)
-			} else {
-				agentStatus = "N/A"
-				agentVersion = "N/A"
-			}
-		} else {
-			nodesConnected = "0"
-			agentStatus = "N/A"
-			agentVersion = "N/A"
-		}
-
-		writer.Write([]string{name, nodeCount, agentConnected, nodesConnected, agentStatus, agentVersion, provider, environment})
+	for _, enriched := range enrichedClusters {
+		// Use the fields from `enriched`, e.g., enriched.Name, enriched.NodeCount, etc.
+		writer.Write([]string{
+			enriched.Name,
+			fmt.Sprintf("%d", enriched.NodeCount),
+			fmt.Sprintf("%v", enriched.AgentConnected),
+			enriched.NodesConnected,
+			enriched.AgentStatus,
+			enriched.AgentVersion,
+			enriched.Provider,
+			getEnvironment(string(enriched.Name[3])),
+		})
 	}
 
 	return nil
@@ -144,17 +169,16 @@ func getAgentData(clusterName string) (model.AgentData, error) {
 	return agentData, nil
 }
 
-// Function to filter agent details based on status
-func filterAgentDetails(details []model.AgentDetail, statuses []string) []model.AgentDetail {
+func filterAgentDetails(details []model.AgentDetail, statuses []model.AgentStatusType) []model.AgentDetail {
 	var filteredDetails []model.AgentDetail
 
-	statusMap := make(map[string]bool)
+	statusMap := make(map[model.AgentStatusType]bool)
 	for _, status := range statuses {
 		statusMap[status] = true
 	}
 
 	for _, detail := range details {
-		if _, ok := statusMap[detail.AgentStatus]; ok {
+		if _, ok := statusMap[model.AgentStatusType(detail.AgentStatus)]; ok {
 			filteredDetails = append(filteredDetails, detail)
 		}
 	}
@@ -183,7 +207,19 @@ type CommandLineArgs struct {
 	Output    string
 }
 
+func customUsage() {
+	fmt.Fprintf(flag.CommandLine.Output(), "Description:\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "\tcommand-line tool for tracking cluster onboarding based on CSPM data. It provides functionalities like fetching cluster data, filtering based on specific criteria, and exporting details to a CSV file.\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "Requirements:\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "\tSet SYSDIG_TOKEN with your Secure API token from Sysdig UI.\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "\tSet SYSDIG_URL with your Sysdig API endpoint URL.\n\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+	flag.PrintDefaults()
+}
+
 func parseArguments() CommandLineArgs {
+	flag.Usage = customUsage
+
 	limit := flag.Int("limit", 150, "Limit the number of results")
 	filter := flag.String("filter", "", "Filter criteria")
 	connected := flag.String("connected", "", "Connected status filter")

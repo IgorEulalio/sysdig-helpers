@@ -1,0 +1,62 @@
+# Binaries and object files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+*.out
+*.test
+
+# Compiled Go packages
+*.p
+*.pc
+
+# Folders
+bin/
+obj/
+release/
+
+# Dependency directories (remove these if you're using vendoring)
+/vendor/
+/Godeps/
+
+# Error files
+*.err
+
+# Output files
+*.out
+
+# Log files
+*.log
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test files
+*_test.go
+
+# Coverage files
+coverage.txt
+*.cover
+*.coverage
+*.coverprofile
+
+# Miscellaneous files
+*.tmp
+*.temp
+*.old
+*.bak
+
+# GoLand configuration directory
+/.idea/
+
+# Go build cache
+$GOPATH/pkg/
+clusters.csv
