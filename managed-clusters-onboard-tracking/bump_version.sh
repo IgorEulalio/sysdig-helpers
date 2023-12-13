@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Location of the file storing the current version
-VERSION_FILE="./secure/sysdig-audit-vm-runtime/VERSION"
+VERSION_FILE="./managed-clusters-onboard-tracking/VERSION"
 
 # Read the current version
 if [ ! -f $VERSION_FILE ]; then
