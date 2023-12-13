@@ -3,9 +3,7 @@ name: GoReleaser
 on:
     workflow_dispatch:
     push:
-        branches: ['*']
-        paths:
-          - 'managed-clusters-onboard-tracking/*'
+      branches: ['*']
 
 jobs:
   goreleaser:
