@@ -1,12 +1,11 @@
 name: GoReleaser
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - '*'
-    paths:
-      - '*'
+    workflow_dispatch:
+    push:
+        branches: ['*']
+        paths:
+          - 'managed-clusters-onboard-tracking/*'
 
 jobs:
   goreleaser:
@@ -19,26 +18,26 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: '1.21.3'
-    #   - name: Check prior VERSION file
-    #     run: cat ./secure/sysdig-audit-vm-runtime/VERSION
+      - name: Check prior VERSION file
+        run: cat ./managed-clusters-onboard-tracking/VERSION
 
-    #   - name: Increment version
-    #     run: |
-    #       chmod +x ./secure/sysdig-audit-vm-runtime/increment_version.sh
-    #       NEW_VERSION=$(./secure/sysdig-audit-vm-runtime/increment_version.sh)
-    #       echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+      - name: Increment version
+        run: |
+          chmod +x ./managed-clusters-onboard-tracking/bump_version.sh
+          NEW_VERSION=$(./managed-clusters-onboard-tracking/bump_version.sh)
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
-    #   - name: Commit version increment
-    #     run: |
-    #       git config --local user.email "action@github.com"
-    #       git config --local user.name "GitHub Action"
-    #       git add ./secure/sysdig-audit-vm-runtime/VERSION
-    #       git commit -m "Increment version to ${{ env.NEW_VERSION }}"
-    #       git tag ${{ env.NEW_VERSION }}
-    #       git push origin HEAD --tags
+      - name: Commit version increment
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add ./managed-clusters-onboard-tracking/VERSION
+          git commit -m "Increment version to ${{ env.NEW_VERSION }}"
+          git tag ${{ env.NEW_VERSION }}
+          git push origin HEAD --tags
 
-    #   - name: Check updated VERSION file
-    #     run: cat ./secure/sysdig-audit-vm-runtime/VERSION
+      - name: Check updated VERSION file
+        run: cat ./managed-clusters-onboard-tracking/VERSION
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v2
