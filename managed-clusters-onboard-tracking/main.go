@@ -9,11 +9,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 // Setting the environment variables
-var sysdigURL = os.Getenv("SYSDIG_URL")
-var token = os.Getenv("SYSDIG_TOKEN")
+var sysdigURL = os.Getenv("API_URL")
+var token = os.Getenv("SECURE_API_TOKEN")
 
 func main() {
 	args := parseArguments()
@@ -30,6 +31,8 @@ func main() {
 		return
 	}
 
+	getMetricsData(enrichedClusters)
+
 	// Write to CSV
 	err = writeToCSV(args.Output, enrichedClusters)
 	if err != nil {
@@ -37,13 +40,33 @@ func main() {
 	}
 }
 
+// Function to retrieve following metrics from enrichedClusters object
+// Based on NodesConnected and ClusterInfo.NodeCount, extract total percentage of nodes connected
+func getMetricsData(enrichedClusters []model.EnrichedClusterInfo) {
+
+	totalNodesConnected := 0
+	totalNodes := 0
+
+	for _, cluster := range enrichedClusters {
+		nodesConnected, err := strconv.Atoi(cluster.NodesConnected)
+		if err != nil {
+			log.Fatal("error converting NodesConnected to int: ", err)
+			return
+		}
+		totalNodesConnected += nodesConnected
+		totalNodes += cluster.NodeCount
+	}
+
+	fmt.Println("Total Nodes Connected: ", totalNodesConnected)
+	fmt.Println("Total Nodes: ", totalNodes)
+	fmt.Println("Percentage of Nodes Connected: ", float64(totalNodesConnected)/float64(totalNodes)*100)
+}
+
 func enrichClusterData(clusters []model.ClusterInfo) ([]model.EnrichedClusterInfo, error) {
 	enrichedClusters := make([]model.EnrichedClusterInfo, len(clusters))
 
 	for i, cluster := range clusters {
 		enriched := model.EnrichedClusterInfo{ClusterInfo: cluster}
-		// printe entire cluster object
-		fmt.Println(cluster)
 		if cluster.AgentConnected {
 			agentData, err := getAgentData(cluster.Name)
 			if err != nil {
@@ -120,7 +143,6 @@ func getClusterData(limit int, filter, connected string) ([]model.ClusterInfo, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

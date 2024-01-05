@@ -4,8 +4,8 @@ import os
 import argparse
 import json
 # Setting the environment variables
-sysdig_url = os.environ.get('SYSDIG_URL')
-token = os.environ.get('SYSDIG_TOKEN')
+sysdig_url = os.environ.get('API_URL')
+token = os.environ.get('SECURE_API_TOKEN')
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Fetch Sysdig cluster data.')
