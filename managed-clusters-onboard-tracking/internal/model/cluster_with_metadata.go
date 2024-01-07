@@ -1,6 +1,6 @@
 package model
 
-type EnrichedClusterInfo struct {
+type ClusterWithAgentMetadata struct {
 	ClusterInfo
 	NodesConnected string
 	AgentStatus    string

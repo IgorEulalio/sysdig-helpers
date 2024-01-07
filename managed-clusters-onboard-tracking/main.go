@@ -25,29 +25,29 @@ func main() {
 		return
 	}
 
-	enrichedClusters, err := enrichClusterData(clusters)
+	clusters_with_agents_info, err := addAgentMetadata(clusters)
 	if err != nil {
 		log.Fatal("error enriching cluster data: ", err)
 		return
 	}
 
-	getMetricsData(enrichedClusters)
+	getMetricsData(clusters_with_agents_info)
 
 	// Write to CSV
-	err = writeToCSV(args.Output, enrichedClusters)
+	err = writeToCSV(args.Output, clusters_with_agents_info)
 	if err != nil {
 		fmt.Println("Failed to write to CSV:", err)
 	}
 }
 
-// Function to retrieve following metrics from enrichedClusters object
+// Function to retrieve following metrics from clusterWithAgentMetadata object
 // Based on NodesConnected and ClusterInfo.NodeCount, extract total percentage of nodes connected
-func getMetricsData(enrichedClusters []model.EnrichedClusterInfo) {
+func getMetricsData(clusterWithAgentMetadata []model.ClusterWithAgentMetadata) {
 
 	totalNodesConnected := 0
 	totalNodes := 0
 
-	for _, cluster := range enrichedClusters {
+	for _, cluster := range clusterWithAgentMetadata {
 		nodesConnected, err := strconv.Atoi(cluster.NodesConnected)
 		if err != nil {
 			log.Fatal("error converting NodesConnected to int: ", err)
@@ -62,11 +62,12 @@ func getMetricsData(enrichedClusters []model.EnrichedClusterInfo) {
 	fmt.Println("Percentage of Nodes Connected: ", float64(totalNodesConnected)/float64(totalNodes)*100)
 }
 
-func enrichClusterData(clusters []model.ClusterInfo) ([]model.EnrichedClusterInfo, error) {
-	enrichedClusters := make([]model.EnrichedClusterInfo, len(clusters))
+func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, error) {
+	clusterWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
 
+	// opportunity to refactor this loop to use goroutines
 	for i, cluster := range clusters {
-		enriched := model.EnrichedClusterInfo{ClusterInfo: cluster}
+		cluster_with_agent_metadata := model.ClusterWithAgentMetadata{ClusterInfo: cluster}
 		if cluster.AgentConnected {
 			agentData, err := getAgentData(cluster.Name)
 			if err != nil {
@@ -74,9 +75,9 @@ func enrichClusterData(clusters []model.ClusterInfo) ([]model.EnrichedClusterInf
 			}
 
 			if agentData.AgentStats != (model.AgentStats{}) {
-				enriched.NodesConnected = fmt.Sprintf("%v", agentData.AgentStats.TotalCount)
+				cluster_with_agent_metadata.NodesConnected = fmt.Sprintf("%v", agentData.AgentStats.TotalCount)
 			} else {
-				enriched.NodesConnected = "0"
+				cluster_with_agent_metadata.NodesConnected = "0"
 			}
 
 			agentDetails := filterAgentDetails(agentData.Details, []model.AgentStatusType{
@@ -86,26 +87,26 @@ func enrichClusterData(clusters []model.ClusterInfo) ([]model.EnrichedClusterInf
 				model.AgentStatusDisconnected,
 			})
 			if len(agentDetails) > 0 {
-				enriched.AgentStatus = agentDetails[0].AgentStatus
-				enriched.AgentVersion = agentDetails[0].AgentVersion
+				cluster_with_agent_metadata.AgentStatus = agentDetails[0].AgentStatus
+				cluster_with_agent_metadata.AgentVersion = agentDetails[0].AgentVersion
 			} else {
-				enriched.AgentStatus = "N/A"
-				enriched.AgentVersion = "N/A"
+				cluster_with_agent_metadata.AgentStatus = "N/A"
+				cluster_with_agent_metadata.AgentVersion = "N/A"
 			}
 		} else {
-			enriched.NodesConnected = "0"
-			enriched.AgentStatus = "N/A"
-			enriched.AgentVersion = "N/A"
+			cluster_with_agent_metadata.NodesConnected = "0"
+			cluster_with_agent_metadata.AgentStatus = "N/A"
+			cluster_with_agent_metadata.AgentVersion = "N/A"
 		}
 
-		enrichedClusters[i] = enriched
+		clusterWithAgentMetadata[i] = cluster_with_agent_metadata
 	}
 
-	return enrichedClusters, nil
+	return clusterWithAgentMetadata, nil
 }
 
 // Function to write to CSV
-func writeToCSV(fileName string, enrichedClusters []model.EnrichedClusterInfo) error {
+func writeToCSV(fileName string, clusterWithAgentMetadata []model.ClusterWithAgentMetadata) error {
 	file, err := os.Create(fileName)
 	if err != nil {
 		return err
@@ -119,17 +120,17 @@ func writeToCSV(fileName string, enrichedClusters []model.EnrichedClusterInfo) e
 	writer.Write([]string{"name", "node_count", "agentConnected", "nodes_connected", "agent_status", "agent_version", "provider", "environment"})
 
 	// Write data
-	for _, enriched := range enrichedClusters {
-		// Use the fields from `enriched`, e.g., enriched.Name, enriched.NodeCount, etc.
+	for _, cluster_with_agent_metadata := range clusterWithAgentMetadata {
+		// Use the fields from `cluster_with_agent_metadata`, e.g., cluster_with_agent_metadata.Name, cluster_with_agent_metadata.NodeCount, etc.
 		writer.Write([]string{
-			enriched.Name,
-			fmt.Sprintf("%d", enriched.NodeCount),
-			fmt.Sprintf("%v", enriched.AgentConnected),
-			enriched.NodesConnected,
-			enriched.AgentStatus,
-			enriched.AgentVersion,
-			enriched.Provider,
-			getEnvironment(string(enriched.Name[3])),
+			cluster_with_agent_metadata.Name,
+			fmt.Sprintf("%d", cluster_with_agent_metadata.NodeCount),
+			fmt.Sprintf("%v", cluster_with_agent_metadata.AgentConnected),
+			cluster_with_agent_metadata.NodesConnected,
+			cluster_with_agent_metadata.AgentStatus,
+			cluster_with_agent_metadata.AgentVersion,
+			cluster_with_agent_metadata.Provider,
+			getEnvironment(string(cluster_with_agent_metadata.Name[3])),
 		})
 	}
 
