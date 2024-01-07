@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 // Setting the environment variables
@@ -31,6 +32,9 @@ func validateEnvironment() {
 }
 
 func main() {
+
+	start := time.Now()
+
 	args := parseArguments()
 
 	clusters, err := getClusterData(args.Limit, args.Filter, args.Connected)
@@ -52,6 +56,8 @@ func main() {
 	if err != nil {
 		fmt.Println("Failed to write to CSV:", err)
 	}
+	end_time := time.Now()
+	fmt.Println("Execution time: ", end_time.Sub(start))
 }
 
 func getMetricsData(clusterWithAgentMetadata []model.ClusterWithAgentMetadata) {
@@ -113,6 +119,50 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 	}
 	return clusterWithAgentMetadata, nil
 }
+
+// func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, error) {
+// 	clusterWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
+// 	var wg sync.WaitGroup
+// 	errChan := make(chan error, len(clusters))
+
+// 	for i, cluster := range clusters {
+// 		wg.Add(1)
+// 		go func(i int, cluster model.ClusterInfo) {
+// 			defer wg.Done()
+
+// 			clusterMetadata := model.ClusterWithAgentMetadata{
+// 				ClusterInfo:    cluster,
+// 				NodesConnected: "0",
+// 				AgentStatus:    "N/A",
+// 				AgentVersion:   "N/A",
+// 			}
+
+// 			if cluster.AgentConnected {
+// 				agentData, err := getAgentData(cluster.Name)
+// 				if err != nil {
+// 					errChan <- fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
+// 					return
+// 				}
+
+// 				updateClusterMetadataWithAgentData(&clusterMetadata, agentData)
+// 			}
+
+// 			clusterWithAgentMetadata[i] = clusterMetadata
+// 		}(i, cluster)
+// 	}
+
+// 	wg.Wait()
+// 	close(errChan)
+
+// 	// Check if any errors occurred
+// 	for err := range errChan {
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 	}
+
+// 	return clusterWithAgentMetadata, nil
+// }
 
 func writeToCSV(fileName string, clusterWithAgentMetadata []model.ClusterWithAgentMetadata) error {
 	file, err := os.Create(fileName)
