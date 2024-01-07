@@ -16,6 +16,20 @@ import (
 var sysdigURL = os.Getenv("API_URL")
 var token = os.Getenv("SECURE_API_TOKEN")
 
+// validate environment variables are set
+func init() {
+	validateEnvironment()
+}
+
+func validateEnvironment() {
+	if sysdigURL == "" {
+		log.Fatal("API_URL environment variable not set")
+	}
+	if token == "" {
+		log.Fatal("SECURE_API_TOKEN environment variable not set")
+	}
+}
+
 func main() {
 	args := parseArguments()
 
@@ -25,23 +39,21 @@ func main() {
 		return
 	}
 
-	clusters_with_agents_info, err := addAgentMetadata(clusters)
+	clustersWithAgentInfo, err := addAgentMetadata(clusters)
 	if err != nil {
 		log.Fatal("error enriching cluster data: ", err)
 		return
 	}
 
-	getMetricsData(clusters_with_agents_info)
+	getMetricsData(clustersWithAgentInfo)
 
 	// Write to CSV
-	err = writeToCSV(args.Output, clusters_with_agents_info)
+	err = writeToCSV(args.Output, clustersWithAgentInfo)
 	if err != nil {
 		fmt.Println("Failed to write to CSV:", err)
 	}
 }
 
-// Function to retrieve following metrics from clusterWithAgentMetadata object
-// Based on NodesConnected and ClusterInfo.NodeCount, extract total percentage of nodes connected
 func getMetricsData(clusterWithAgentMetadata []model.ClusterWithAgentMetadata) {
 
 	totalNodesConnected := 0
@@ -62,50 +74,46 @@ func getMetricsData(clusterWithAgentMetadata []model.ClusterWithAgentMetadata) {
 	fmt.Println("Percentage of Nodes Connected: ", float64(totalNodesConnected)/float64(totalNodes)*100)
 }
 
+func updateClusterMetadataWithAgentData(clusterMetadata *model.ClusterWithAgentMetadata, agentData model.AgentData) {
+	agentDetails := filterAgentDetails(agentData.Details, []model.AgentStatusType{
+		model.AgentStatusAlmostOutOfDate,
+		model.AgentStatusOutOfDate,
+		model.AgentStatusUpToDate,
+		model.AgentStatusDisconnected,
+	})
+	if agentData.AgentStats != (model.AgentStats{}) {
+		clusterMetadata.NodesConnected = fmt.Sprintf("%v", agentData.AgentStats.TotalCount)
+	}
+	if len(agentDetails) > 0 {
+		clusterMetadata.AgentStatus = agentDetails[0].AgentStatus
+		clusterMetadata.AgentVersion = agentDetails[0].AgentVersion
+	}
+}
+
 func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, error) {
 	clusterWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
-
-	// opportunity to refactor this loop to use goroutines
 	for i, cluster := range clusters {
-		cluster_with_agent_metadata := model.ClusterWithAgentMetadata{ClusterInfo: cluster}
+		clusterMetadata := model.ClusterWithAgentMetadata{
+			ClusterInfo:    cluster,
+			NodesConnected: "0", // default value
+			AgentStatus:    "N/A",
+			AgentVersion:   "N/A",
+		}
+
 		if cluster.AgentConnected {
 			agentData, err := getAgentData(cluster.Name)
 			if err != nil {
-				return nil, fmt.Errorf("failed to get agent data: %v", err)
+				return nil, fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
 			}
 
-			if agentData.AgentStats != (model.AgentStats{}) {
-				cluster_with_agent_metadata.NodesConnected = fmt.Sprintf("%v", agentData.AgentStats.TotalCount)
-			} else {
-				cluster_with_agent_metadata.NodesConnected = "0"
-			}
-
-			agentDetails := filterAgentDetails(agentData.Details, []model.AgentStatusType{
-				model.AgentStatusAlmostOutOfDate,
-				model.AgentStatusOutOfDate,
-				model.AgentStatusUpToDate,
-				model.AgentStatusDisconnected,
-			})
-			if len(agentDetails) > 0 {
-				cluster_with_agent_metadata.AgentStatus = agentDetails[0].AgentStatus
-				cluster_with_agent_metadata.AgentVersion = agentDetails[0].AgentVersion
-			} else {
-				cluster_with_agent_metadata.AgentStatus = "N/A"
-				cluster_with_agent_metadata.AgentVersion = "N/A"
-			}
-		} else {
-			cluster_with_agent_metadata.NodesConnected = "0"
-			cluster_with_agent_metadata.AgentStatus = "N/A"
-			cluster_with_agent_metadata.AgentVersion = "N/A"
+			updateClusterMetadataWithAgentData(&clusterMetadata, agentData) // extracted function
 		}
 
-		clusterWithAgentMetadata[i] = cluster_with_agent_metadata
+		clusterWithAgentMetadata[i] = clusterMetadata
 	}
-
 	return clusterWithAgentMetadata, nil
 }
 
-// Function to write to CSV
 func writeToCSV(fileName string, clusterWithAgentMetadata []model.ClusterWithAgentMetadata) error {
 	file, err := os.Create(fileName)
 	if err != nil {
@@ -120,24 +128,23 @@ func writeToCSV(fileName string, clusterWithAgentMetadata []model.ClusterWithAge
 	writer.Write([]string{"name", "node_count", "agentConnected", "nodes_connected", "agent_status", "agent_version", "provider", "environment"})
 
 	// Write data
-	for _, cluster_with_agent_metadata := range clusterWithAgentMetadata {
-		// Use the fields from `cluster_with_agent_metadata`, e.g., cluster_with_agent_metadata.Name, cluster_with_agent_metadata.NodeCount, etc.
+	for _, clustersWithAgentMetadata := range clusterWithAgentMetadata {
+		// Use the fields from `clustersWithAgentMetadata`, e.g., clustersWithAgentMetadata.Name, clustersWithAgentMetadata.NodeCount, etc.
 		writer.Write([]string{
-			cluster_with_agent_metadata.Name,
-			fmt.Sprintf("%d", cluster_with_agent_metadata.NodeCount),
-			fmt.Sprintf("%v", cluster_with_agent_metadata.AgentConnected),
-			cluster_with_agent_metadata.NodesConnected,
-			cluster_with_agent_metadata.AgentStatus,
-			cluster_with_agent_metadata.AgentVersion,
-			cluster_with_agent_metadata.Provider,
-			getEnvironment(string(cluster_with_agent_metadata.Name[3])),
+			clustersWithAgentMetadata.Name,
+			fmt.Sprintf("%d", clustersWithAgentMetadata.NodeCount),
+			fmt.Sprintf("%v", clustersWithAgentMetadata.AgentConnected),
+			clustersWithAgentMetadata.NodesConnected,
+			clustersWithAgentMetadata.AgentStatus,
+			clustersWithAgentMetadata.AgentVersion,
+			clustersWithAgentMetadata.Provider,
+			getEnvironment(string(clustersWithAgentMetadata.Name[3])),
 		})
 	}
 
 	return nil
 }
 
-// Function to get the cluster data with named arguments for filter, limit, and connected
 func getClusterData(limit int, filter, connected string) ([]model.ClusterInfo, error) {
 	url := fmt.Sprintf("%s/api/cloud/v2/dataSources/clusters?limit=%d&filter=%s&connected=%s", sysdigURL, limit, filter, connected)
 	req, err := http.NewRequest("GET", url, nil)
@@ -164,7 +171,6 @@ func getClusterData(limit int, filter, connected string) ([]model.ClusterInfo, e
 	return clusters, nil
 }
 
-// Function to get agent data
 func getAgentData(clusterName string) (model.AgentData, error) {
 	url := fmt.Sprintf("%s/api/cloud/v2/dataSources/agents?filter=%s", sysdigURL, clusterName)
 	req, err := http.NewRequest("GET", url, nil)
@@ -209,7 +215,6 @@ func filterAgentDetails(details []model.AgentDetail, statuses []model.AgentStatu
 	return filteredDetails
 }
 
-// Function to return environment based on environment single string
 func getEnvironment(environment string) string {
 	switch environment {
 	case "d":
