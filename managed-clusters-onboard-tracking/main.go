@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"sync"
 )
 
 // Setting the environment variables
@@ -98,71 +99,46 @@ func updateClusterMetadataWithAgentData(clusterMetadata *model.ClusterWithAgentM
 
 func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, error) {
 	clusterWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
-	for i, cluster := range clusters {
-		clusterMetadata := model.ClusterWithAgentMetadata{
-			ClusterInfo:    cluster,
-			NodesConnected: "0", // default value
-			AgentStatus:    "N/A",
-			AgentVersion:   "N/A",
-		}
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(clusters))
 
-		if cluster.AgentConnected {
-			agentData, err := getAgentData(cluster.Name)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
+	for i, cluster := range clusters {
+		wg.Add(1)
+		go func(i int, cluster model.ClusterInfo) {
+			defer wg.Done()
+
+			clusterMetadata := model.ClusterWithAgentMetadata{
+				ClusterInfo:    cluster,
+				NodesConnected: "0",
+				AgentStatus:    "N/A",
+				AgentVersion:   "N/A",
 			}
 
-			updateClusterMetadataWithAgentData(&clusterMetadata, agentData) // extracted function
-		}
+			if cluster.AgentConnected {
+				agentData, err := getAgentData(cluster.Name)
+				if err != nil {
+					errChan <- fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
+					return
+				}
 
-		clusterWithAgentMetadata[i] = clusterMetadata
+				updateClusterMetadataWithAgentData(&clusterMetadata, agentData)
+			}
+
+			clusterWithAgentMetadata[i] = clusterMetadata
+		}(i, cluster)
 	}
+
+	wg.Wait()
+	close(errChan)
+	
+	for err := range errChan {
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return clusterWithAgentMetadata, nil
 }
-
-// func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, error) {
-// 	clusterWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
-// 	var wg sync.WaitGroup
-// 	errChan := make(chan error, len(clusters))
-
-// 	for i, cluster := range clusters {
-// 		wg.Add(1)
-// 		go func(i int, cluster model.ClusterInfo) {
-// 			defer wg.Done()
-
-// 			clusterMetadata := model.ClusterWithAgentMetadata{
-// 				ClusterInfo:    cluster,
-// 				NodesConnected: "0",
-// 				AgentStatus:    "N/A",
-// 				AgentVersion:   "N/A",
-// 			}
-
-// 			if cluster.AgentConnected {
-// 				agentData, err := getAgentData(cluster.Name)
-// 				if err != nil {
-// 					errChan <- fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
-// 					return
-// 				}
-
-// 				updateClusterMetadataWithAgentData(&clusterMetadata, agentData)
-// 			}
-
-// 			clusterWithAgentMetadata[i] = clusterMetadata
-// 		}(i, cluster)
-// 	}
-
-// 	wg.Wait()
-// 	close(errChan)
-
-// 	// Check if any errors occurred
-// 	for err := range errChan {
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
-
-// 	return clusterWithAgentMetadata, nil
-// }
 
 func writeToCSV(fileName string, clusterWithAgentMetadata []model.ClusterWithAgentMetadata) error {
 	file, err := os.Create(fileName)
