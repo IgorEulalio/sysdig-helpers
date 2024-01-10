@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/logging"
 	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/model"
 	"encoding/csv"
 	"fmt"
@@ -36,6 +37,11 @@ func WriteToCSV(fileName string, clusterWithAgentMetadata []model.ClusterWithAge
 			strconv.FormatBool(clustersWithAgentMetadata.RuntimeEnabled),
 		})
 	}
+	dir, err := os.Getwd()
+	if err != nil {
+		logging.Log.Errorf("Failed to obtain current dir. Error %s", err)
+	}
+	logging.Log.Debugf("Created csv file successfully. File name: %s, file path: %s", fileName, dir)
 
 	return nil
 }
