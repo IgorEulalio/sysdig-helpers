@@ -5,4 +5,5 @@ type ClusterWithAgentMetadata struct {
 	NodesConnected string
 	AgentStatus    string
 	AgentVersion   string
+	RuntimeEnabled bool
 }

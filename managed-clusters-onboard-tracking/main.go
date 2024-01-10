@@ -1,34 +1,33 @@
 package main
 
 import (
-	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/internal/model"
-	"encoding/csv"
-	"encoding/json"
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/adapter"
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/client"
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/config"
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/logging"
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/model"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"strconv"
-	"time"
 	"sync"
+	"time"
 )
 
-// Setting the environment variables
-var sysdigURL = os.Getenv("API_URL")
-var token = os.Getenv("SECURE_API_TOKEN")
+var mutex sync.Mutex
 
-// validate environment variables are set
 func init() {
-	validateEnvironment()
-}
+	errs := config.LoadConfig()
+	logging.InitLogger(config.Config)
 
-func validateEnvironment() {
-	if sysdigURL == "" {
-		log.Fatal("API_URL environment variable not set")
-	}
-	if token == "" {
-		log.Fatal("SECURE_API_TOKEN environment variable not set")
+	if len(errs) > 0 {
+		for _, err := range errs {
+			logging.Log.Error(err)
+		}
+		os.Exit(1) // or another code to signify abnormal termination
 	}
 }
 
@@ -38,13 +37,14 @@ func main() {
 
 	args := parseArguments()
 
-	clusters, err := getClusterData(args.Limit, args.Filter, args.Connected)
+	clusters, err := client.GetClusterData(args.Limit, args.Filter, args.Connected)
 	if err != nil {
 		log.Fatal("error getting cluster data: ", err)
 		return
 	}
 
-	clustersWithAgentInfo, err := addAgentMetadata(clusters)
+	clustersWithAgentInfo, runtimeClusters, err := addAgentMetadata(clusters)
+	mergeClusterInfoWithRuntime(clustersWithAgentInfo, runtimeClusters)
 	if err != nil {
 		log.Fatal("error enriching cluster data: ", err)
 		return
@@ -53,12 +53,24 @@ func main() {
 	getMetricsData(clustersWithAgentInfo)
 
 	// Write to CSV
-	err = writeToCSV(args.Output, clustersWithAgentInfo)
+	err = adapter.WriteToCSV(args.Output, clustersWithAgentInfo)
 	if err != nil {
-		fmt.Println("Failed to write to CSV:", err)
+		logging.Log.Info("Failed to write to CSV:", err)
 	}
 	end_time := time.Now()
-	fmt.Println("Execution time: ", end_time.Sub(start))
+	logging.Log.Info("Execution time: ", end_time.Sub(start))
+}
+
+func mergeClusterInfoWithRuntime(clusters []model.ClusterWithAgentMetadata, runtimeClusters map[string]model.RuntimeCluster) {
+	for i := range clusters {
+		cluster := &clusters[i] // Get a pointer to the actual element in the slice
+		runtimeCluster, exist := runtimeClusters[cluster.Name]
+		if exist {
+			cluster.RuntimeEnabled = runtimeCluster.IsEnabled
+		} else {
+			cluster.RuntimeEnabled = false
+		}
+	}
 }
 
 func getMetricsData(clusterWithAgentMetadata []model.ClusterWithAgentMetadata) {
@@ -76,9 +88,9 @@ func getMetricsData(clusterWithAgentMetadata []model.ClusterWithAgentMetadata) {
 		totalNodes += cluster.NodeCount
 	}
 
-	fmt.Println("Total Nodes Connected: ", totalNodesConnected)
-	fmt.Println("Total Nodes: ", totalNodes)
-	fmt.Println("Percentage of Nodes Connected: ", float64(totalNodesConnected)/float64(totalNodes)*100)
+	logging.Log.Info("Total Nodes Connected: ", totalNodesConnected)
+	logging.Log.Info("Total Nodes: ", totalNodes)
+	logging.Log.Info("Percentage of Nodes Connected: ", float64(totalNodesConnected)/float64(totalNodes)*100)
 }
 
 func updateClusterMetadataWithAgentData(clusterMetadata *model.ClusterWithAgentMetadata, agentData model.AgentData) {
@@ -97,13 +109,16 @@ func updateClusterMetadataWithAgentData(clusterMetadata *model.ClusterWithAgentM
 	}
 }
 
-func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, error) {
-	clusterWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
+func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, map[string]model.RuntimeCluster, error) {
+	clustersWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
+
+	// map of cluster name to runtime data
+	runtimeClusters := make(map[string]model.RuntimeCluster)
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(clusters))
 
 	for i, cluster := range clusters {
-		wg.Add(1)
+		wg.Add(2)
 		go func(i int, cluster model.ClusterInfo) {
 			defer wg.Done()
 
@@ -112,10 +127,11 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 				NodesConnected: "0",
 				AgentStatus:    "N/A",
 				AgentVersion:   "N/A",
+				RuntimeEnabled: false,
 			}
 
 			if cluster.AgentConnected {
-				agentData, err := getAgentData(cluster.Name)
+				agentData, err := client.GetAgentData(cluster.Name)
 				if err != nil {
 					errChan <- fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
 					return
@@ -124,104 +140,39 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 				updateClusterMetadataWithAgentData(&clusterMetadata, agentData)
 			}
 
-			clusterWithAgentMetadata[i] = clusterMetadata
+			clustersWithAgentMetadata[i] = clusterMetadata
+		}(i, cluster)
+		go func(i int, cluster model.ClusterInfo) {
+			defer wg.Done()
+			runtimeCluster, err := client.GetRuntimeData(cluster.Name)
+			if err != nil {
+				errChan <- fmt.Errorf("failed to get runtime data for cluster %v: %v", cluster.Name, err)
+				return
+			}
+			mutex.Lock()
+			runtimeClusters[cluster.Name] = runtimeCluster
+			mutex.Unlock()
 		}(i, cluster)
 	}
 
 	wg.Wait()
 	close(errChan)
-	
+
 	for err := range errChan {
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-
-	return clusterWithAgentMetadata, nil
+	return clustersWithAgentMetadata, runtimeClusters, nil
 }
 
-func writeToCSV(fileName string, clusterWithAgentMetadata []model.ClusterWithAgentMetadata) error {
-	file, err := os.Create(fileName)
+func bodyReader(body io.ReadCloser) {
+	bodyBytes, err := ioutil.ReadAll(body)
 	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	// Write header
-	writer.Write([]string{"name", "node_count", "agentConnected", "nodes_connected", "agent_status", "agent_version", "provider", "environment"})
-
-	// Write data
-	for _, clustersWithAgentMetadata := range clusterWithAgentMetadata {
-		// Use the fields from `clustersWithAgentMetadata`, e.g., clustersWithAgentMetadata.Name, clustersWithAgentMetadata.NodeCount, etc.
-		writer.Write([]string{
-			clustersWithAgentMetadata.Name,
-			fmt.Sprintf("%d", clustersWithAgentMetadata.NodeCount),
-			fmt.Sprintf("%v", clustersWithAgentMetadata.AgentConnected),
-			clustersWithAgentMetadata.NodesConnected,
-			clustersWithAgentMetadata.AgentStatus,
-			clustersWithAgentMetadata.AgentVersion,
-			clustersWithAgentMetadata.Provider,
-			getEnvironment(string(clustersWithAgentMetadata.Name[3])),
-		})
+		log.Fatal(err)
 	}
 
-	return nil
-}
-
-func getClusterData(limit int, filter, connected string) ([]model.ClusterInfo, error) {
-	url := fmt.Sprintf("%s/api/cloud/v2/dataSources/clusters?limit=%d&filter=%s&connected=%s", sysdigURL, limit, filter, connected)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to perform request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch cluster data. Status code: %d", resp.StatusCode)
-	}
-
-	var clusters []model.ClusterInfo
-	err = json.NewDecoder(resp.Body).Decode(&clusters)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return clusters, nil
-}
-
-func getAgentData(clusterName string) (model.AgentData, error) {
-	url := fmt.Sprintf("%s/api/cloud/v2/dataSources/agents?filter=%s", sysdigURL, clusterName)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return model.AgentData{}, fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return model.AgentData{}, fmt.Errorf("failed to perform request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return model.AgentData{}, fmt.Errorf("failed to fetch agent data. Status code: %d", resp.StatusCode)
-	}
-
-	var agentData model.AgentData
-	err = json.NewDecoder(resp.Body).Decode(&agentData)
-	if err != nil {
-		return model.AgentData{}, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	return agentData, nil
+	logging.Log.Info(string(bodyBytes))
 }
 
 func filterAgentDetails(details []model.AgentDetail, statuses []model.AgentStatusType) []model.AgentDetail {
@@ -239,19 +190,6 @@ func filterAgentDetails(details []model.AgentDetail, statuses []model.AgentStatu
 	}
 
 	return filteredDetails
-}
-
-func getEnvironment(environment string) string {
-	switch environment {
-	case "d":
-		return "development"
-	case "p":
-		return "production"
-	case "i":
-		return "pre-production"
-	default:
-		return "unknown"
-	}
 }
 
 type CommandLineArgs struct {
