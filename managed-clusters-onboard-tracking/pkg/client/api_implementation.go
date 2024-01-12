@@ -8,9 +8,11 @@ import (
 	"strconv"
 )
 
-const runtimeInformationPath = "%s/api/scanning/runtime/v2/workflows/results"
-const clusterInformationPath = "%s/api/cloud/v2/dataSources/clusters"
-const agentInformationPath = "%s/api/cloud/v2/dataSources/agents"
+const (
+	runtimeInformationPath = "%s/api/scanning/runtime/v2/workflows/results"
+	clusterInformationPath = "%s/api/cloud/v2/dataSources/clusters"
+	agentInformationPath   = "%s/api/cloud/v2/dataSources/agents"
+)
 
 func (c *Client) GetRuntimeData(clusterName string) (model.RuntimeCluster, error) {
 
