@@ -19,7 +19,7 @@ func LoadConfig() []error {
 	var errs []error
 
 	Config = &Configuration{
-		ServiceName:    getEnv("SERVICE_NAME", ""),
+		ServiceName:    getEnv("SERVICE_NAME", "managed-clusters-onboard-tracking"),
 		LogLevel:       getEnv("LOG_LEVEL", "info"),
 		ApiURL:         getEnv("API_URL", "https://secure.sysdig.com"),
 		SecureApiToken: getEnv("SECURE_API_TOKEN", ""),

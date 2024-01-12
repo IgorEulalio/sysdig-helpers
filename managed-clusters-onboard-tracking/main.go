@@ -33,17 +33,21 @@ func init() {
 
 func main() {
 
+	var sysdigClient client.API = &client.Client{
+		SecureApiToken: config.Config.SecureApiToken,
+		BaseURL:        config.Config.ApiURL,
+	}
 	start := time.Now()
 
 	args := parseArguments()
 
-	clusters, err := client.GetClusterData(args.Limit, args.Filter, args.Connected)
+	clusters, err := sysdigClient.GetClusterData(args.Limit, args.Filter, args.Connected)
 	if err != nil {
 		log.Fatal("error getting cluster data: ", err)
 		return
 	}
 
-	clustersWithAgentInfo, runtimeClusters, err := addAgentMetadata(clusters)
+	clustersWithAgentInfo, runtimeClusters, err := addAgentMetadata(clusters, sysdigClient)
 	mergeClusterInfoWithRuntime(clustersWithAgentInfo, runtimeClusters)
 	if err != nil {
 		log.Fatal("error enriching cluster data: ", err)
@@ -109,7 +113,7 @@ func updateClusterMetadataWithAgentData(clusterMetadata *model.ClusterWithAgentM
 	}
 }
 
-func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, map[string]model.RuntimeCluster, error) {
+func addAgentMetadata(clusters []model.ClusterInfo, sysdigClient client.API) ([]model.ClusterWithAgentMetadata, map[string]model.RuntimeCluster, error) {
 	clustersWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
 
 	// map of cluster name to runtime data
@@ -131,7 +135,7 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 			}
 
 			if cluster.AgentConnected {
-				agentData, err := client.GetAgentData(cluster.Name)
+				agentData, err := sysdigClient.GetAgentData(cluster.Name)
 				if err != nil {
 					errChan <- fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
 					return
@@ -144,7 +148,7 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 		}(i, cluster)
 		go func(i int, cluster model.ClusterInfo) {
 			defer wg.Done()
-			runtimeCluster, err := client.GetRuntimeData(cluster.Name)
+			runtimeCluster, err := sysdigClient.GetRuntimeData(cluster.Name)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to get runtime data for cluster %v: %v", cluster.Name, err)
 				return
