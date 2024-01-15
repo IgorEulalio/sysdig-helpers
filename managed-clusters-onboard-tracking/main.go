@@ -36,7 +36,9 @@ func main() {
 	var sysdigClient client.API = &client.Client{
 		SecureApiToken: config.Config.SecureApiToken,
 		BaseURL:        config.Config.ApiURL,
+		MaxRetries:     config.Config.ApiMaxRetries,
 	}
+	logging.Log.Debugf("Created HTTP client with following configs: %+v", sysdigClient)
 
 	start := time.Now()
 
@@ -47,11 +49,12 @@ func main() {
 	}
 
 	clustersWithAgentInfo, runtimeClusters, err := getExtraFeaturesInformationFromClusters(clusters, sysdigClient)
-	mergeClusterInfoWithRuntime(clustersWithAgentInfo, runtimeClusters)
 	if err != nil {
 		logging.Log.Fatal("error enriching cluster data: ", err)
 		return
 	}
+
+	mergeClusterInfoWithRuntime(clustersWithAgentInfo, runtimeClusters)
 
 	getMetricsData(clustersWithAgentInfo)
 

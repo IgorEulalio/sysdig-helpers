@@ -1,6 +1,7 @@
 package client
 
 import (
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/logging"
 	"encoding/json"
 	"fmt"
 	"github.com/cenkalti/backoff/v4"
@@ -14,11 +15,12 @@ type Client struct {
 	ServiceName    string
 	BaseURL        string
 	SecureApiToken string
+	MaxRetries     int
 }
 
 const (
-	maxElapsedTime = 3
-	maxInterval    = 1
+	maxElapsedTime = 10
+	maxInterval    = 500
 )
 
 func (c *Client) NewRequest(method string, url *url.URL, body io.Reader) (*http.Request, error) {
@@ -44,7 +46,10 @@ func (c *Client) CreateUrl(path string, pathParams map[string]string) (*url.URL,
 }
 
 func (c *Client) Do(req *http.Request, v interface{}) error {
+	attempt := 0
+
 	operation := func() error {
+		attempt++
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return err
@@ -52,23 +57,26 @@ func (c *Client) Do(req *http.Request, v interface{}) error {
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
+			logging.Log.Debugf("successfully called endpoint %s with status code %d", req.URL, resp.StatusCode)
 			if v != nil {
 				return json.NewDecoder(resp.Body).Decode(v)
 			}
 			return nil
 		}
 
-		if resp.StatusCode == http.StatusTooManyRequests {
-			return backoff.Permanent(fmt.Errorf("status code: %d", resp.StatusCode))
+		if resp.StatusCode == http.StatusTooManyRequests && attempt < c.MaxRetries {
+			logging.Log.Errorf("Attempt %d calling API %s: Received status code 429. Retrying...", attempt, req.URL)
+			return fmt.Errorf("you were trothled in API %s. status code: %d", req.URL, resp.StatusCode)
 		}
 
-		return fmt.Errorf("status code: %d", resp.StatusCode)
+		return backoff.Permanent(fmt.Errorf("status code: %d", resp.StatusCode))
 	}
 
 	// Exponential backoff configuration
 	expBackOff := backoff.NewExponentialBackOff()
 	expBackOff.MaxElapsedTime = maxElapsedTime * time.Second
-	expBackOff.MaxInterval = maxInterval * time.Second
+	expBackOff.MaxInterval = maxInterval * time.Millisecond
 
-	return backoff.Retry(operation, expBackOff)
+	// Retry with exponential backoff
+	return backoff.Retry(operation, backoff.WithMaxRetries(expBackOff, uint64(c.MaxRetries)))
 }
