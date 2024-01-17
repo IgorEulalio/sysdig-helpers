@@ -42,6 +42,7 @@ func (c *Client) CreateUrl(path string, pathParams map[string]string) (*url.URL,
 	for pathParam, pathParamValue := range pathParams {
 		q.Set(pathParam, pathParamValue)
 	}
+	parsedUrl.RawQuery = q.Encode()
 	return parsedUrl, nil
 }
 

@@ -88,7 +88,10 @@ func (c *Client) GetAgentData(clusterName string) (model.AgentData, error) {
 	c.ServiceName = "AGENT_DATA" // Set the service name for logging
 
 	// Construct path parameters
-	pathParams := map[string]string{"filter": clusterName}
+	pathParams := map[string]string{"filter": clusterName,
+		"limit":  "1",
+		"offset": "0",
+	}
 
 	// Create URL using the client's method
 	urlFormat, err := c.CreateUrl(agentInformationPath, pathParams)

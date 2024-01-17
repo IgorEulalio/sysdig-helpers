@@ -26,7 +26,7 @@ func LoadConfig() []error {
 		LogLevel:       getEnv("LOG_LEVEL", "info"),
 		ApiURL:         getEnv("API_URL", "https://secure.sysdig.com"),
 		SecureApiToken: getEnv("SECURE_API_TOKEN", ""),
-		ApiMaxRetries:  getIntEnv("API_MAX_RETRIES", 5),
+		ApiMaxRetries:  getIntEnv("API_MAX_RETRIES", 3),
 	}
 
 	if Config.ServiceName == "" {
