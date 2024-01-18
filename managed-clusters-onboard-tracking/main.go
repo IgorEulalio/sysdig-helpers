@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"strconv"
 	"sync"
@@ -32,23 +31,30 @@ func init() {
 }
 
 func main() {
+	args := parseArguments()
+
+	var sysdigClient client.API = &client.Client{
+		SecureApiToken: config.Config.SecureApiToken,
+		BaseURL:        config.Config.ApiURL,
+		MaxRetries:     config.Config.ApiMaxRetries,
+	}
+	logging.Log.Debugf("Created HTTP client with following configs: %+v", sysdigClient)
 
 	start := time.Now()
 
-	args := parseArguments()
-
-	clusters, err := client.GetClusterData(args.Limit, args.Filter, args.Connected)
+	clusters, err := sysdigClient.GetClusterData(args.Limit, args.Filter, args.Connected)
 	if err != nil {
-		log.Fatal("error getting cluster data: ", err)
+		logging.Log.Fatal("error getting cluster data: ", err)
 		return
 	}
 
-	clustersWithAgentInfo, runtimeClusters, err := addAgentMetadata(clusters)
+	clustersWithAgentInfo, runtimeClusters, err := getExtraFeaturesInformationFromClusters(clusters, sysdigClient)
+	if err != nil {
+		logging.Log.Fatal("error enriching cluster data: ", err)
+		return
+	}
+
 	mergeClusterInfoWithRuntime(clustersWithAgentInfo, runtimeClusters)
-	if err != nil {
-		log.Fatal("error enriching cluster data: ", err)
-		return
-	}
 
 	getMetricsData(clustersWithAgentInfo)
 
@@ -81,7 +87,7 @@ func getMetricsData(clusterWithAgentMetadata []model.ClusterWithAgentMetadata) {
 	for _, cluster := range clusterWithAgentMetadata {
 		nodesConnected, err := strconv.Atoi(cluster.NodesConnected)
 		if err != nil {
-			log.Fatal("error converting NodesConnected to int: ", err)
+			logging.Log.Fatal("error converting NodesConnected to int: ", err)
 			return
 		}
 		totalNodesConnected += nodesConnected
@@ -109,7 +115,7 @@ func updateClusterMetadataWithAgentData(clusterMetadata *model.ClusterWithAgentM
 	}
 }
 
-func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMetadata, map[string]model.RuntimeCluster, error) {
+func getExtraFeaturesInformationFromClusters(clusters []model.ClusterInfo, sysdigClient client.API) ([]model.ClusterWithAgentMetadata, map[string]model.RuntimeCluster, error) {
 	clustersWithAgentMetadata := make([]model.ClusterWithAgentMetadata, len(clusters))
 
 	// map of cluster name to runtime data
@@ -131,7 +137,7 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 			}
 
 			if cluster.AgentConnected {
-				agentData, err := client.GetAgentData(cluster.Name)
+				agentData, err := sysdigClient.GetAgentData(cluster.Name)
 				if err != nil {
 					errChan <- fmt.Errorf("failed to get agent data for cluster %v. Error: %v", cluster.Name, err)
 					return
@@ -144,7 +150,7 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 		}(i, cluster)
 		go func(i int, cluster model.ClusterInfo) {
 			defer wg.Done()
-			runtimeCluster, err := client.GetRuntimeData(cluster.Name)
+			runtimeCluster, err := sysdigClient.GetRuntimeData(cluster.Name)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to get runtime data for cluster %v: %v", cluster.Name, err)
 				return
@@ -169,7 +175,7 @@ func addAgentMetadata(clusters []model.ClusterInfo) ([]model.ClusterWithAgentMet
 func bodyReader(body io.ReadCloser) {
 	bodyBytes, err := ioutil.ReadAll(body)
 	if err != nil {
-		log.Fatal(err)
+		logging.Log.Fatal(err)
 	}
 
 	logging.Log.Info(string(bodyBytes))
