@@ -87,9 +87,10 @@ func (c *Client) GetAgentData(clusterName string) (model.AgentData, error) {
 
 	c.ServiceName = "AGENT_DATA" // Set the service name for logging
 
-	// Construct path parameters
 	pathParams := map[string]string{"filter": clusterName,
-		"limit":  "1",
+		// If cluster has multiple nodes, limit 1 might not bring clusters with status we're looking for
+		// such as Up to date, Almost out of date, Out of date
+		"limit":  "500",
 		"offset": "0",
 	}
 
