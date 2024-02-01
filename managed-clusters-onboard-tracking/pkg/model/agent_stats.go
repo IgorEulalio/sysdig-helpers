@@ -17,10 +17,11 @@ type AgentStats struct {
 }
 
 type AgentDetail struct {
-	AgentStatus    string `json:"agentStatus"`
-	AgentVersion   string `json:"agentVersion"`
-	AgentLastSeen  string `json:"agentLastSeen"`
-	ClusterName    string `json:"clusterName"`
-	DeploymentType string `json:"deploymentType"`
-	Containerised  bool   `json:"containerised"`
+	AgentStatus    string            `json:"agentStatus"`
+	AgentVersion   string            `json:"agentVersion"`
+	AgentLastSeen  string            `json:"agentLastSeen"`
+	ClusterName    string            `json:"clusterName"`
+	DeploymentType string            `json:"deploymentType"`
+	Containerised  bool              `json:"containerised"`
+	Labels         map[string]string `json:"labels"`
 }

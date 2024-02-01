@@ -12,6 +12,9 @@ const (
 	runtimeInformationPath = "%s/api/scanning/runtime/v2/workflows/results"
 	clusterInformationPath = "%s/api/cloud/v2/dataSources/clusters"
 	agentInformationPath   = "%s/api/cloud/v2/dataSources/agents"
+	inventoryPath          = "%s/api/cspm/v1/inventory/resources"
+	resourcePath           = "%s/api/cspm/v1/cloud/resource"
+	connectedAgentsPath    = "%s/api/agents/connected"
 )
 
 func (c *Client) GetRuntimeData(clusterName string) (model.RuntimeCluster, error) {
@@ -124,4 +127,106 @@ func isRuntimeEnabled(runtimeData model.RuntimeData) bool {
 	isEnabled := runtimeData.Page.Matched > 0
 
 	return isEnabled
+}
+
+func (c *Client) GetInventoryData(pageSize int) (model.InventoryWrapper, error) {
+
+	c.ServiceName = "INVENTORY_SERVICE" // Set the service name for logging
+	pageNumber := 1
+
+	pathParams := map[string]string{
+		"pageNumber": strconv.Itoa(pageNumber),
+		"pageSize":   strconv.Itoa(pageSize),
+		"filter":     "type = \"EC2 Instance\"",
+		"fields":     "id,hash,name",
+	}
+
+	// Create URL using the client's method
+	urlFormat, err := c.CreateUrl(inventoryPath, pathParams)
+	if err != nil {
+		logging.Log.Errorf("Error creating URL for service %s. Error: %v", c.ServiceName, err)
+		return model.InventoryWrapper{}, err
+	}
+
+	// Create a new request
+	req, err := c.NewRequest(http.MethodGet, urlFormat, nil)
+	if err != nil {
+		logging.Log.Errorf("Error creating request for service %s. Error: %v", c.ServiceName, err)
+		return model.InventoryWrapper{}, err
+	}
+
+	// Declare a slice to hold the cluster data
+	var inventoryResponse model.InventoryWrapper
+
+	// Make the request and decode response into clusters
+	err = c.Do(req, &inventoryResponse)
+	if err != nil {
+		return model.InventoryWrapper{}, err
+	}
+
+	return inventoryResponse, nil
+}
+
+func (c *Client) GetCloudResourceFromHash(hash string) (model.CloudResource, error) {
+	c.ServiceName = "RESOURCE_SERVICE" // Set the service name for logging
+
+	pathParams := map[string]string{
+		"resourceHash": hash,
+		"fields":       "id,hash,name,platform,type,configuration,keyvalueconfigs,labels,lastseen,metadata,zones,posturepolicysummary,posturecontrolsummary,resourceorigin,category",
+	}
+
+	// Create URL using the client's method
+	urlFormat, err := c.CreateUrl(resourcePath, pathParams)
+	if err != nil {
+		logging.Log.Errorf("Error creating URL for service %s. Error: %v", c.ServiceName, err)
+		return model.CloudResource{}, err
+	}
+
+	// Create a new request
+	req, err := c.NewRequest(http.MethodGet, urlFormat, nil)
+	if err != nil {
+		logging.Log.Errorf("Error creating request for service %s. Error: %v", c.ServiceName, err)
+		return model.CloudResource{}, err
+	}
+
+	// Declare a slice to hold the cluster data
+	var cloudResourceWrapper model.CloudResourceWrapper
+
+	// Make the request and decode response into clusters
+	err = c.Do(req, &cloudResourceWrapper)
+	if err != nil {
+		return model.CloudResource{}, err
+	}
+
+	return cloudResourceWrapper.CloudResource, nil
+}
+
+func (c *Client) GetConnectedAgents() (model.AgentsConnectedWrapper, error) {
+	c.ServiceName = "CONNECTED_AGENTS" // Set the service name for logging
+
+	// Create URL using the client's method
+	pathParams := map[string]string{}
+	urlFormat, err := c.CreateUrl(connectedAgentsPath, pathParams)
+	if err != nil {
+		logging.Log.Errorf("Error creating URL for service %s. Error: %v", c.ServiceName, err)
+		return model.AgentsConnectedWrapper{}, err
+	}
+
+	// Create a new request
+	req, err := c.NewRequest(http.MethodGet, urlFormat, nil)
+	if err != nil {
+		logging.Log.Errorf("Error creating request for service %s. Error: %v", c.ServiceName, err)
+		return model.AgentsConnectedWrapper{}, err
+	}
+
+	// Declare a slice to hold the cluster data
+	var agentsConnectedWrapper model.AgentsConnectedWrapper
+
+	// Make the request and decode response into clusters
+	err = c.Do(req, &agentsConnectedWrapper)
+	if err != nil {
+		return model.AgentsConnectedWrapper{}, err
+	}
+
+	return agentsConnectedWrapper, nil
 }

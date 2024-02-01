@@ -6,4 +6,7 @@ type API interface {
 	GetRuntimeData(clusterName string) (model.RuntimeCluster, error)
 	GetClusterData(limit int, filter, connected string) ([]model.ClusterInfo, error)
 	GetAgentData(clusterName string) (model.AgentData, error)
+	GetInventoryData(pageSize int) (model.InventoryWrapper, error)
+	GetCloudResourceFromHash(hash string) (model.CloudResource, error)
+	GetConnectedAgents() (model.AgentsConnectedWrapper, error)
 }

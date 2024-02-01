@@ -2,6 +2,7 @@ package main
 
 import (
 	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/adapter"
+	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/biz"
 	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/client"
 	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/config"
 	"IgorEulalio/sysdig-helpers/managed-clusters-onboard-tracking/pkg/logging"
@@ -54,17 +55,38 @@ func main() {
 		return
 	}
 
-	mergeClusterInfoWithRuntime(clustersWithAgentInfo, runtimeClusters)
+	inventoryHostsData, err := biz.GetHostsData(sysdigClient)
+	if err != nil {
+		logging.Log.Errorf("Error getting complete inventory: %v", err)
+	}
 
+	resourcesByHash, err := biz.GetResourcesByHash(sysdigClient, inventoryHostsData)
+	if err != nil {
+		logging.Log.Errorf("Error retrieving resources by hash: %v", err)
+	}
+
+	connectedAgents, err := biz.GetConnectedHosts(sysdigClient)
+
+	connectedHostsMacAddress := biz.GetConnectedHostsMacAddress(connectedAgents)
+	hosts, err := biz.MapCloudResourceToHosts(resourcesByHash, connectedHostsMacAddress)
+
+	mergeClusterInfoWithRuntime(clustersWithAgentInfo, runtimeClusters)
 	getMetricsData(clustersWithAgentInfo)
 
-	// Write to CSV
-	err = adapter.WriteToCSV(args.Output, clustersWithAgentInfo)
+	// Write cluster data to CSV
+	err = adapter.WriteClusterData(args.Output, clustersWithAgentInfo)
 	if err != nil {
 		logging.Log.Info("Failed to write to CSV:", err)
 	}
-	end_time := time.Now()
-	logging.Log.Info("Execution time: ", end_time.Sub(start))
+
+	// Write host data to CSV
+	err = adapter.WriteHostDataToCSV(args.Output, hosts)
+	if err != nil {
+		logging.Log.Info("Failed to write to CSV:", err)
+	}
+
+	endTime := time.Now()
+	logging.Log.Info("Execution time: ", endTime.Sub(start))
 }
 
 func mergeClusterInfoWithRuntime(clusters []model.ClusterWithAgentMetadata, runtimeClusters map[string]model.RuntimeCluster) {
