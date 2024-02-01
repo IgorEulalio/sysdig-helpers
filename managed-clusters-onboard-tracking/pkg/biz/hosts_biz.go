@@ -52,8 +52,6 @@ func GetResourcesByHash(sysdigClient client.API, inventory []model.Inventory) ([
 			logging.Log.Errorf("Fail to unmarshal config object into Configuration struct: %v", err)
 			continue // Proceed with the next item in the loop
 		}
-
-		logging.Log.Infof("Configuration: %+v", config)
 		cloudResource.ParsedConfiguration = config // Assuming you have this field in your CloudResource struct
 		cloudResources = append(cloudResources, cloudResource)
 	}

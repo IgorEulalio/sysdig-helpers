@@ -14,7 +14,9 @@ const dateFormat = "02-01-2006"
 
 func WriteClusterData(fileName string, clusterWithAgentMetadata []model.ClusterWithAgentMetadata) error {
 
-	file, err := os.Create(fmt.Sprintf("clusters-%s-%s", fileName, time.Now().Format(dateFormat)))
+	completeFileName := fmt.Sprintf("host-%s-%s", fileName, time.Now().Format(dateFormat))
+	file, err := os.Create(completeFileName)
+
 	if err != nil {
 		return err
 	}
@@ -51,8 +53,9 @@ func WriteClusterData(fileName string, clusterWithAgentMetadata []model.ClusterW
 }
 
 func WriteHostDataToCSV(fileName string, hosts []model.Host) error {
-	time.Now()
-	file, err := os.Create(fmt.Sprintf("host-%s-%s", fileName, time.Now().Format(dateFormat)))
+
+	completeFileName := fmt.Sprintf("host-%s-%s", fileName, time.Now().Format(dateFormat))
+	file, err := os.Create(completeFileName)
 
 	if err != nil {
 		return err
@@ -83,7 +86,7 @@ func WriteHostDataToCSV(fileName string, hosts []model.Host) error {
 	if err != nil {
 		logging.Log.Errorf("Failed to obtain current dir. Error %s", err)
 	}
-	logging.Log.Debugf("Created csv file successfully. File name: %s, file path: %s", fileName, dir)
+	logging.Log.Debugf("Created csv file successfully. File name: %s, file path: %s", completeFileName, dir)
 
 	return nil
 }
