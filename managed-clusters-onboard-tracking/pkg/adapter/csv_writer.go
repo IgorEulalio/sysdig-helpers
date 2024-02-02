@@ -14,7 +14,7 @@ const dateFormat = "02-01-2006"
 
 func WriteClusterData(fileName string, clusterWithAgentMetadata []model.ClusterWithAgentMetadata) error {
 
-	completeFileName := fmt.Sprintf("host-%s-%s", fileName, time.Now().Format(dateFormat))
+	completeFileName := fmt.Sprintf("cluster-%s-%s.csv", fileName, time.Now().Format(dateFormat))
 	file, err := os.Create(completeFileName)
 
 	if err != nil {
@@ -54,7 +54,7 @@ func WriteClusterData(fileName string, clusterWithAgentMetadata []model.ClusterW
 
 func WriteHostDataToCSV(fileName string, hosts []model.Host) error {
 
-	completeFileName := fmt.Sprintf("host-%s-%s", fileName, time.Now().Format(dateFormat))
+	completeFileName := fmt.Sprintf("host-%s-%s.csv", fileName, time.Now().Format(dateFormat))
 	file, err := os.Create(completeFileName)
 
 	if err != nil {
