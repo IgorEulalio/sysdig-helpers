@@ -43,12 +43,14 @@ func main() {
 
 	start := time.Now()
 
+	logging.Log.Info("Getting cluster CSPM data from datasources...")
 	clusters, err := sysdigClient.GetClusterData(args.Limit, args.Filter, args.Connected)
 	if err != nil {
 		logging.Log.Fatal("error getting cluster data: ", err)
 		return
 	}
 
+	logging.Log.Info("Getting runtime information for CSPM clusters...")
 	clustersWithAgentInfo, runtimeClusters, err := getExtraFeaturesInformationFromClusters(clusters, sysdigClient)
 	if err != nil {
 		logging.Log.Fatal("error enriching cluster data: ", err)

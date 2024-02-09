@@ -66,7 +66,7 @@ func WriteHostDataToCSV(fileName string, hosts []model.Host) error {
 	defer writer.Flush()
 
 	// Write header
-	writer.Write([]string{"name", "account", "organization", "region", "is_kubernetes_host", "cluster_name", "nodegroup_name", "connected"})
+	writer.Write([]string{"name", "account", "organization", "region", "is_kubernetes_host", "cluster_name", "nodegroup_name", "connected", "os_type"})
 
 	// Write data
 	for _, host := range hosts {
@@ -80,6 +80,7 @@ func WriteHostDataToCSV(fileName string, hosts []model.Host) error {
 			host.ClusterName,
 			host.NodeGroup,
 			strconv.FormatBool(host.Connected),
+			host.OsType,
 		})
 	}
 	dir, err := os.Getwd()

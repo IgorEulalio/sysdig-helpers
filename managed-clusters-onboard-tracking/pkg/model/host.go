@@ -9,4 +9,5 @@ type Host struct {
 	ClusterName      string
 	NodeGroup        string
 	Connected        bool
+	OsType           string
 }

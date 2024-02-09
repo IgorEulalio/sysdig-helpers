@@ -71,6 +71,7 @@ func MapCloudResourceToHosts(cloudResources []model.CloudResource, macAddresses 
 			IsKubernetesHost: isKubernetesHost(cloudResource.Labels),
 			NodeGroup:        getNodeGroupName(cloudResource.Labels),
 			Connected:        verifyIfENIMacAddressIsPresent(cloudResource.ParsedConfiguration.NetworkInterfaces, macAddresses),
+			OsType:           cloudResource.ParsedConfiguration.PlatformDetails,
 		}
 		hosts = append(hosts, host)
 	}
