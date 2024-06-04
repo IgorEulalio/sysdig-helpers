@@ -1,6 +1,6 @@
 # Managed Clusters Onboard Tracking
 
-This repository contains a Go application to track the onboarding status of managed clusters. The app can filter and export onboarding data based on specific criteria.
+This repository contains a Go application to collect data out of datasources tab in Sysdig, providing you a view of your clusters in csv format.
 
 ## Usage
 
@@ -33,6 +33,13 @@ go run main.go --filter <filter_option> --output <output_file>
 
     ```sh
     go mod tidy
+    ```
+
+2. Export environment variables:
+
+    ```sh
+    export API_URL=$url
+    export SECURE_API_TOKEN=$api_token
     ```
 
 ### Example
